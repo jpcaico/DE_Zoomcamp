@@ -1,0 +1,65 @@
+---- Part I ----
+
+Question 1:
+
+docker --help build
+--iidfile string 
+
+Question 2:
+3
+pip
+setuptools
+wheel
+
+Question 3:
+SELECT
+COUNT(1),
+EXTRACT(MONTH FROM lpep_pickup_datetime) AS pickup_month,
+EXTRACT(DAY FROM lpep_pickup_datetime) AS pickup_day,
+EXTRACT(DAY FROM lpep_dropoff_datetime) AS dropoff_day
+
+FROM green_taxi_data
+GROUP BY pickup_month, pickup_day, dropoff_day
+HAVING EXTRACT(MONTH FROM lpep_pickup_datetime) = 1 AND EXTRACT(DAY FROM lpep_pickup_datetime) = 15
+
+20530
+
+Question 4:
+2019-01-15
+
+SELECT
+MAX(trip_distance),
+date_trunc('day',lpep_pickup_datetime)
+FROM green_taxi_data
+GROUP BY date_trunc('day',lpep_pickup_datetime)
+ORDER BY MAX(trip_distance) DESC;
+
+Question 5:
+SELECT
+COUNT(1),
+date_trunc('day',lpep_pickup_datetime),
+passenger_count
+FROM green_taxi_data
+WHERE passenger_count IN (2,3) AND date_trunc('day',lpep_pickup_datetime) = '2019-01-01 00:00:00'
+GROUP BY date_trunc('day',lpep_pickup_datetime), passenger_count
+2: 1282 ; 3: 254
+
+Question 6:
+SELECT 
+MAX(t."tip_amount"),
+z."Zone" as PUZone,
+z1."Zone" as DOZone
+
+FROM green_taxi_data t
+JOIN zones z
+ON z."LocationID" = t."PULocationID"
+JOIN zones z1
+ON z1."LocationID" = t."DOLocationID"
+GROUP BY z."Zone", z1."Zone"
+HAVING z."Zone" = 'Astoria'
+ORDER BY MAX(t."tip_amount") DESC
+
+Long Island City/Queens Plaza
+
+--- Part II ---
+

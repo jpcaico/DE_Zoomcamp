@@ -1,0 +1,317 @@
+docker run -it \
+  -e POSTGRES_USER="root" \
+  -e POSTGRES_PASSWORD="root" \
+  -e POSTGRES_DB="ny_taxi" \
+  -v $(pwd)/ny_taxi_postgres_data:/var/lib/postgresql/data \
+  -p 5432:5432 \
+  postgres:13
+
+
+pip install pgcli
+
+#if you have some postgres instance running locally, you may need to stop it to avoid conflict with the user root.
+brew services stop postgres or pg_ctl restart -D "/Users/jalvi/Library/Application Support/Postgres/var-14"
+pg_ctl stop -D "/Users/jalvi/Library/Application Support/Postgres/var-14"
+pg_ctl restart -D "/Users/jalvi/Library/Application Support/Postgres/var-14"
+
+pgcli -h localhost -p 5432 -u root -d ny_taxi
+
+# downloading data
+wget https://github.com/DataTalksClub/nyc-tlc-data/releases/download/yellow/yellow_tripdata_2021-01.csv.gz 
+
+head -n 100 yellow_tripdata_2021-01.csv > yellow_head.csv
+
+#dataset doc
+https://www1.nyc.gov/site/tlc/about/tlc-trip-record-data.page
+https://www1.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_yellow.pdf
+
+#after ingesting the data through python
+SELECT max(tpep_pickup_datetime), min(tpep_pickup_datetime), max(total_amount) FROM yellow_taxi_data;
+
+# connecting to pgadmin
+docker run -it \
+ -e PGADMIN_DEFAULT_EMAIL="admin@admin.com" \
+ -e PGADMIN_DEFAULT_PASSWORD="root" \
+ -p 8080:80 \
+ dpage/pgadmin4
+
+#now we need to make the two containers talk 
+docker network create pg-network
+
+#re run
+docker run -it \
+  -e POSTGRES_USER="root" \
+  -e POSTGRES_PASSWORD="root" \
+  -e POSTGRES_DB="ny_taxi" \
+  -v $(pwd)/ny_taxi_postgres_data:/var/lib/postgresql/data \
+  -p 5432:5432 \
+  --network=pg-network \
+  --name pg-database \
+  postgres:13 
+
+
+docker run -it \
+ -e PGADMIN_DEFAULT_EMAIL="admin@admin.com" \
+ -e PGADMIN_DEFAULT_PASSWORD="root" \
+ -p 8080:80 \
+ --network=pg-network \
+ --name pgadmin \
+ dpage/pgadmin4
+
+ # convert jupyter to python
+ jupyter nbconvert --to=script upload-data.ipynb
+
+# commands to run the python script
+python ingest_data.py \
+  --user=root \
+  --password=root \
+  --host=localhost \
+  --port=5432 \
+  --db=ny_taxi \
+  --table_name=yellow_taxi_trips \
+  --url="https://github.com/DataTalksClub/nyc-tlc-data/releases/download/yellow/yellow_tripdata_2021-01.csv.gz"
+ 
+ #building an image for the new file
+ DOCKER_BUILDKIT=0 docker build -t taxi_ingest:v001 .
+
+ #run the script in the docker
+ URL="https://github.com/DataTalksClub/nyc-tlc-data/releases/download/yellow/yellow_tripdata_2021-01.csv.gz"
+
+docker run -it \
+  --network=pg-network \
+  taxi_ingest:v001 \
+    --user="root" \
+    --password="root" \
+    --host=pg-database \
+    --port="5432" \
+    --db="ny_taxi" \
+    --table_name="yellow_taxi_trips" \
+    --url="https://github.com/DataTalksClub/nyc-tlc-data/releases/download/yellow/yellow_tripdata_2021-01.csv.gz"
+
+# stop the container with postgres and pgadmin to start docker compose then run
+docker ps
+docker-compose up -d
+
+#to close
+ctrl c
+docker compose down
+
+# upload zones table from the notebook (code added in the notebook)
+# run some queries
+
+SELECT 
+
+tpep_pickup_datetime,
+tpep_dropoff_datetime,
+total_amount,
+CONCAT(zpu."Borough" , ' / ' ,zpu."Zone") AS "pick_up_loc",
+CONCAT(zdo."Borough" , ' / ' , zdo."Zone") AS "drop_off_loc"
+
+FROM yellow_taxi_trips t,
+zones zpu,
+zones zdo
+WHERE 
+t."PULocationID" = zpu."LocationID" AND
+t."DOLocationID" = zdo."LocationID"
+limit 100;
+
+
+SELECT 
+
+tpep_pickup_datetime,
+tpep_dropoff_datetime,
+total_amount,
+CONCAT(zpu."Borough" , ' / ' ,zpu."Zone") AS "pick_up_loc",
+CONCAT(zdo."Borough" , ' / ' , zdo."Zone") AS "drop_off_loc"
+
+FROM yellow_taxi_trips t
+JOIN zones zpu ON t."PULocationID" = zpu."LocationID"
+JOIN zones zdo
+ON t."DOLocationID" = zdo."LocationID"
+LIMIT 100;
+
+
+### Part II Terraform GCP
+
+export GOOGLE_APPLICATION_CREDENTIALS="/Users/jalvi/Desktop/github-personal/Data_Engineering_Zoomcamp/Data_Ingestion/terraform_gcp/data-eng-bootcamp-key.json"
+
+# Refresh token/session, and verify authentication
+gcloud auth application-default login
+
+# creating gcp infrastructure with terraform
+terraform init
+
+ls -la
+
+terraform plan
+
+terraform apply
+
+# setting up the environment on google cloud (cloud vm + ssh access)
+
+# create ssh key that we will use to access the vm instance
+cd ~/.ssh
+ssh-keygen -t rsa -f gcp    -C jpalvimdataeng -b 2048
+
+#attach publick key
+compute engine -> metadata -> ssh keys -> add ssh key
+
+#copy and paste in compute engine
+cat gcp.pub
+
+# back to vm instance
+create instance -> change boot disk to ubuntu 20.4 LTS -> 30gb
+
+# ssh into vm
+copy the external ip and run
+
+ssh -i ~/.ssh/gcp jpalvimdataeng@34.168.168.248
+
+# now we are in
+gcloud --version
+
+#configure vm and setup local ~/.ssh/config
+
+#download anaconda into the vm
+wget https://repo.anaconda.com/archive/Anaconda3-2021.11-Linux-x86_64.sh
+
+bash Anaconda3-2021.11-Linux-x86_64.sh
+
+#check anaconda addition to the initialization file
+less .bashrc 
+
+## add to config file
+Host de-zoomcamp
+  HostName 34.168.168.248
+  User jpalvimdataeng
+  IdentityFile ~/.ssh/gcp
+
+
+# now we can just run
+ssh de-zoomcamp
+
+# press ctrl+d to logout and login again
+which python
+
+#if you dont want to logout and login again, just to
+source .bashrc -- will reevaluate the init file
+
+#install docker
+sudo apt-get update
+sudo apt-get install docker.io
+
+#configure vscode to access the vm from here
+find the remote ssh extension
+
+# on the botton left, click on open a remote window
+select connect to host
+since we have config file it will show up the de-zoomcamp
+
+#clone course github
+git clone https://github.com/DataTalksClub/data-engineering-zoomcamp.git
+
+#test docker
+sudo groupadd docker
+sudo gpasswd -a $USER docker
+sudo service docker restart
+docker run hello-world
+
+# use ubuntu image
+docker run -it ubuntu bash
+exit
+
+#isntall docker compose
+mkdir bin
+cd bin
+wget https://github.com/docker/compose/releases/download/v2.2.3/docker-compose-linux-x86_64 -O docker-compose
+
+chmod +x docker-compose
+
+./docker-compose version
+
+# we want to make it visible for all directories
+#add to the path variable
+nano .bashrc 
+
+#add the bin to the path
+export PATH="${HOME}/bin:${PATH}"
+
+ctrl O to save, enter, ctrl x to exit
+
+source .bashrc
+
+which docker-compose
+docker-compose version
+
+#navigate to week1_basics_n_setup/2_docker_sql folder and run
+docker-compose up -d
+docker ps
+
+#install pgcli
+cd
+pip install pgcli / conda install -c conda-forge pgcli + pip install -U mycli
+
+pgcli -h localhost -U root -d ny_taxi
+
+# docker ps, look at the port that postgres is accessing
+#lets forward this port to our local machine so we can interact with the instance locally
+go to visualstudio code
+press ctrl ~ to show the terminal
+
+click on ports section
+
+click forward a port
+
+add 5432
+
+# now run locally (outside the ssh)
+
+pgcli -h localhost -U root -d ny_taxi
+
+#now forward 8080 as well to have pgadmin
+access localhost:8080
+
+#lets run jupyter, go back to ssh and to the folder 
+# week_1_basics_n_setup/2_docker_sql
+# run
+jupyter notebook
+#it goes to port 8888, forward the port as well
+copy http://localhost:8888/?token=1410b10bfda154b06260d4ba937c5e51c0b9cc3f44f70845
+
+#download data again to the instance
+wget https://github.com/DataTalksClub/nyc-tlc-data/releases/download/yellow/yellow_tripdata_2021-01.csv.gz 
+
+#run the code to populate database
+
+
+# now lets install terraform
+cd bin/
+wget https://releases.hashicorp.com/terraform/1.3.7/terraform_1.3.7_linux_amd64.zip
+#unzip it
+sudo apt-get install unzip
+unzip terraform...
+rm terraform.. zip
+
+cd
+source .bashrc
+terraform -version
+
+# cd to week1_basics../1_terraform../terraform..
+# now we need to get the gcp svc account to the instance
+
+#go back to out of the ssh and to the folder where you have your file
+#run
+sftp de-zoomcamp
+mkdir .gc
+cd .gc
+put data-eng-bootcamp-key.json
+
+#now go back to ssh
+cd .gc/
+ls
+
+#authenticate to gcloud
+export GOOGLE_APPLICATION_CREDENTIALS=~/.gc/data-eng-bootcamp-key.json
+gcloud auth activate-service-account --key-file $GOOGLE_APPLICATION_CREDENTIALS
+
+#stop instance

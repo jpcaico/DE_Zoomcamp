@@ -1,0 +1,24 @@
+
+
+#creating a conda environment
+conda create -n zoomcamp python=3.9
+#activate environment
+conda activate zoomcamp
+# install packages in requirements
+pip install -r requirements.txt
+#check prefect version
+prefect version
+
+
+# enter a pg instance
+docker run -it \
+  -e POSTGRES_USER="root" \
+  -e POSTGRES_PASSWORD="root" \
+  -e POSTGRES_DB="ny_taxi" \
+  -p 5432:5432 \
+  postgres:13
+
+  pgcli -h localhost -p 5432 -u root -d ny_taxi
+
+#run ingest_data file
+python ingest_data.py
